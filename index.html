@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Local AI Coding Stack — 101 (agent → gateway → model, fully observable)</title>
+<style>
+  :root{
+    --bg:#070a12;
+    --ink:#e8eef8; --muted:#8593a8; --faint:#5b6678;
+    --agent:#5b8cff; --gateway:#2dd4bf; --compute:#34d399;
+    --link:#a78bfa; --obs:#f5b53d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  /* ambient canvas */
+  .scene{
+    position:relative; width:1080px; min-height:1320px; margin:0 auto;
+    background:
+      radial-gradient(900px 520px at 50% -8%, rgba(91,140,255,.10), transparent 60%),
+      radial-gradient(700px 600px at 88% 102%, rgba(245,181,61,.07), transparent 60%),
+      radial-gradient(700px 600px at 10% 96%, rgba(52,211,153,.06), transparent 60%),
+      var(--bg);
+    background-attachment:fixed;
+    overflow:hidden;
+  }
+  /* dot grid like a node editor */
+  .grid{position:absolute; inset:0; z-index:0;
+    background-image:radial-gradient(rgba(255,255,255,.05) 1.1px, transparent 1.1px);
+    background-size:26px 26px; mask-image:radial-gradient(120% 90% at 50% 35%, #000 55%, transparent 100%);}
+  .title{position:relative; z-index:3; text-align:center; padding:46px 24px 8px;}
+  .title h1{margin:0; font-size:34px; letter-spacing:.3px; font-weight:800;
+    background:linear-gradient(90deg,#cde0ff,#fff 40%,#bdeee6);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .title p{margin:8px 0 0; color:var(--muted); font-size:14px; letter-spacing:.6px; text-transform:uppercase;}
+
+  svg.wires{position:absolute; inset:0; width:1080px; height:1320px; z-index:1; pointer-events:none;}
+  .flow{stroke-dasharray:7 12; animation:dash 1.1s linear infinite;}
+  @keyframes dash{to{stroke-dashoffset:-38}}
+
+  .node{position:absolute; z-index:2; border-radius:20px; padding:18px 20px;
+    background:linear-gradient(165deg, rgba(23,30,45,.92), rgba(11,15,24,.95));
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 24px 60px -28px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.05);
+    backdrop-filter:blur(6px);}
+  .node .head{display:flex; gap:14px; align-items:center;}
+  .chip{width:46px; height:46px; border-radius:13px; flex:0 0 auto; display:grid; place-items:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18);}
+  .chip svg{width:24px; height:24px}
+  .node h3{margin:0; font-size:17px; font-weight:700; line-height:1.25}
+  .node .sub{margin:7px 0 0; color:var(--muted); font-size:12.5px; line-height:1.5}
+  .why{margin:12px 0 0; padding-top:11px; border-top:1px dashed rgba(255,255,255,.10);
+    color:var(--faint); font-size:11.5px; font-style:italic; line-height:1.5}
+  .tag{position:absolute; top:-11px; left:18px; font-size:10px; letter-spacing:1.4px; text-transform:uppercase;
+    padding:3px 9px; border-radius:999px; font-weight:700; background:#0b0f18;}
+
+  /* category accents */
+  .agent{border-color:rgba(91,140,255,.42); box-shadow:0 24px 60px -26px rgba(91,140,255,.5), inset 0 1px 0 rgba(255,255,255,.05)}
+  .agent .chip{background:linear-gradient(160deg,#5b8cff,#2a5bd7)} .agent .tag{color:var(--agent); border:1px solid rgba(91,140,255,.4)}
+  .gateway{border-color:rgba(45,212,191,.45); box-shadow:0 24px 70px -24px rgba(45,212,191,.55), inset 0 1px 0 rgba(255,255,255,.05)}
+  .gateway .chip{background:linear-gradient(160deg,#2dd4bf,#0e8f80)} .gateway .tag{color:var(--gateway); border:1px solid rgba(45,212,191,.42)}
+  .compute{border-color:rgba(52,211,153,.4)} .compute .chip{background:linear-gradient(160deg,#34d399,#0f9b6c)} .compute .tag{color:var(--compute); border:1px solid rgba(52,211,153,.4)}
+  .link{border-color:rgba(167,139,250,.42)} .link .chip{background:linear-gradient(160deg,#a78bfa,#7c5cf0)} .link .tag{color:var(--link); border:1px solid rgba(167,139,250,.42)}
+  .obs{border-color:rgba(245,181,61,.42)} .obs .chip{background:linear-gradient(160deg,#f5b53d,#d6902a)} .obs .tag{color:var(--obs); border:1px solid rgba(245,181,61,.42)}
+
+  /* WSL2 inner stack */
+  .stack{margin-top:14px; display:flex; flex-direction:column; gap:10px}
+  .pill{display:flex; align-items:center; gap:10px; padding:11px 13px; border-radius:13px;
+    background:rgba(52,211,153,.07); border:1px solid rgba(52,211,153,.22); font-weight:600; font-size:14px}
+  .pill small{display:block; color:var(--muted); font-weight:400; font-size:11px; margin-top:2px}
+  .pill .dot{width:9px;height:9px;border-radius:50%;background:var(--compute);box-shadow:0 0 10px var(--compute)}
+
+  /* Langfuse db grid */
+  .dbs{margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:9px}
+  .db{display:flex; align-items:center; gap:9px; padding:9px 11px; border-radius:11px;
+    background:rgba(245,181,61,.07); border:1px solid rgba(245,181,61,.22); font-size:12.5px; font-weight:600}
+  .db svg{width:17px;height:17px;color:var(--obs)}
+
+  .edgelabel{fill:var(--ink); font-size:12px; font-weight:600; letter-spacing:.3px}
+  .edgelabel.muted{fill:var(--muted); font-weight:500}
+  .lblbg{fill:#0b0f18; stroke:rgba(255,255,255,.10)}
+
+  /* footer platform chips */
+  .footer{position:absolute; z-index:2; left:60px; right:60px; bottom:42px;
+    display:flex; justify-content:space-around; align-items:center; gap:10px;
+    padding:18px 22px; border-radius:18px;
+    background:linear-gradient(165deg, rgba(20,26,40,.9), rgba(10,14,22,.92));
+    border:1px solid rgba(255,255,255,.08); box-shadow:0 24px 60px -30px rgba(0,0,0,.9)}
+  .fitem{display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; color:#cdd7e6}
+  .fitem span small{display:block; font-weight:500; font-size:11px; color:var(--muted)}
+  .fitem .ic{width:30px;height:30px;display:grid;place-items:center}
+  .sep{width:1px; height:30px; background:rgba(255,255,255,.10)}
+
+  /* node doc links */
+  .links{margin-top:11px; display:flex; flex-wrap:wrap; gap:8px}
+  .lnk{display:inline-flex; align-items:center; gap:5px; text-decoration:none;
+    font-size:11px; font-weight:600; letter-spacing:.2px; padding:5px 10px; border-radius:999px;
+    color:#cdd7e6; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
+    transition:.15s}
+  .lnk:hover{background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.24); color:#fff}
+  .lnk svg{width:12px;height:12px;opacity:.7}
+
+  /* ===== BUILD GUIDE ===== */
+  .guide{max-width:1080px; margin:0 auto; padding:8px 24px 90px;
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .guide .ghead{text-align:center; padding:26px 0 6px}
+  .guide .ghead h2{margin:0; font-size:27px; font-weight:800; letter-spacing:.2px;
+    background:linear-gradient(90deg,#cde0ff,#fff 45%,#bdeee6);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .guide .ghead p{margin:8px 0 0; color:var(--muted); font-size:13px; letter-spacing:.5px; text-transform:uppercase}
+
+  .lane{display:flex; gap:8px; justify-content:center; margin:22px 0 4px}
+  .lanebtn{cursor:pointer; user-select:none; font-size:13px; font-weight:700; letter-spacing:.3px;
+    padding:9px 18px; border-radius:12px; color:var(--muted);
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); transition:.15s}
+  .lanebtn:hover{color:#fff}
+  .lanebtn.active{color:#06302b; background:linear-gradient(160deg,#2dd4bf,#0e8f80); border-color:transparent}
+
+  .step{position:relative; margin:18px 0; border-radius:18px; padding:20px 22px 18px;
+    background:linear-gradient(165deg, rgba(20,26,40,.92), rgba(10,14,22,.95));
+    border:1px solid rgba(255,255,255,.08); box-shadow:0 20px 50px -30px rgba(0,0,0,.9)}
+  .step.win .num,.step.mac .num{}
+  .stephead{display:flex; align-items:center; gap:14px}
+  .num{flex:0 0 auto; width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+    font-weight:800; font-size:16px; color:#06302b; background:linear-gradient(160deg,#2dd4bf,#0e8f80);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+  .step.agent-s .num{background:linear-gradient(160deg,#5b8cff,#2a5bd7); color:#fff}
+  .step.obs-s .num{background:linear-gradient(160deg,#f5b53d,#d6902a); color:#3a2807}
+  .step.compute-s .num{background:linear-gradient(160deg,#34d399,#0f9b6c); color:#053b2a}
+  .step.link-s .num{background:linear-gradient(160deg,#a78bfa,#7c5cf0); color:#1d1340}
+  .stephead h3{margin:0; font-size:17px; font-weight:700}
+  .stephead .meta{margin:3px 0 0; color:var(--muted); font-size:12.5px}
+  .badge{margin-left:auto; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; font-weight:700;
+    padding:4px 10px; border-radius:999px; background:#0b0f18; border:1px solid rgba(255,255,255,.14); color:#9fb0c6}
+  .desc{margin:13px 0 0; color:#b9c4d6; font-size:13.5px; line-height:1.6}
+  .desc a{color:#7fb0ff; text-decoration:none; border-bottom:1px solid rgba(127,176,255,.35)}
+  .desc a:hover{border-bottom-color:#7fb0ff}
+  .desc code{background:rgba(255,255,255,.07); padding:1px 6px; border-radius:6px; font-size:12.5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  .code{position:relative; margin:13px 0 0; border-radius:13px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.10); background:#0a0e17}
+  .code .bar{display:flex; align-items:center; gap:8px; padding:8px 12px;
+    background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.08)}
+  .code .bar .dotr{width:10px;height:10px;border-radius:50%}
+  .code .bar .fname{margin-left:6px; color:var(--muted); font-size:11.5px; font-weight:600;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing:.3px}
+  .copy{margin-left:auto; cursor:pointer; font-size:11px; font-weight:700; letter-spacing:.3px;
+    padding:5px 12px; border-radius:8px; color:#cdd7e6;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); transition:.15s}
+  .copy:hover{background:rgba(45,212,191,.16); border-color:rgba(45,212,191,.4); color:#fff}
+  .copy.done{background:linear-gradient(160deg,#2dd4bf,#0e8f80); color:#06302b; border-color:transparent}
+  .code pre{margin:0; padding:15px 16px; overflow-x:auto; font-size:12.8px; line-height:1.65;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:#d6e2f2}
+  .code pre .c{color:#5b6678} /* comment */
+  .code pre .k{color:#7fb0ff} /* keyword/command */
+  .code pre .s{color:#7fd99f} /* string */
+  .clickbox{margin:13px 0 0; padding:12px 14px; border-radius:12px; display:flex; gap:11px; align-items:flex-start;
+    background:rgba(91,140,255,.06); border:1px solid rgba(91,140,255,.22)}
+  .clickbox .pin{flex:0 0 auto; color:#7fb0ff; font-size:15px; margin-top:1px}
+  .clickbox div{color:#c3d2e6; font-size:13px; line-height:1.6}
+  .clickbox b{color:#fff}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+  <div class="scene">
+    <div class="grid"></div>
+
+    <div class="title">
+      <h1>Local AI Coding Stack — the 101</h1>
+      <p>Coding agent → gateway → local model · every token observable · runs on your own machine</p>
+    </div>
+
+    <!-- ===== WIRES (drawn first, sit behind nodes) ===== -->
+    <svg class="wires" viewBox="0 0 1080 1320" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="g-agent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5b8cff"/><stop offset="1" stop-color="#2dd4bf"/>
+        </linearGradient>
+        <linearGradient id="g-compute" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#34d399"/>
+        </linearGradient>
+        <linearGradient id="g-link" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#a78bfa"/>
+        </linearGradient>
+        <linearGradient id="g-obs" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#f5b53d"/>
+        </linearGradient>
+        <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Hermes -> LiteLLM -->
+      <path d="M540,300 C540,360 540,400 540,452" stroke="url(#g-agent)" stroke-width="2.6" fill="none" filter="url(#glow)"/>
+      <path class="flow" d="M540,300 C540,360 540,400 540,452" stroke="#bcd2ff" stroke-width="2.2" fill="none"/>
+      <!-- LiteLLM -> WSL2 (left) -->
+      <path d="M430,700 C360,790 300,820 258,876" stroke="url(#g-compute)" stroke-width="2.6" fill="none" filter="url(#glow)"/>
+      <path class="flow" d="M430,700 C360,790 300,820 258,876" stroke="#b7f5e3" stroke-width="2.2" fill="none"/>
+      <!-- LiteLLM -> LM Link (center) -->
+      <path d="M555,700 C575,780 588,820 596,896" stroke="url(#g-link)" stroke-width="2.6" fill="none" filter="url(#glow)"/>
+      <path class="flow" d="M555,700 C575,780 588,820 596,896" stroke="#dcd0ff" stroke-width="2.2" fill="none"/>
+      <!-- LiteLLM -> Langfuse (right, dashed callback) -->
+      <path d="M800,612 C900,660 905,760 902,866" stroke="url(#g-obs)" stroke-width="2.4" fill="none" stroke-dasharray="3 8" filter="url(#glow)"/>
+
+      <!-- edge labels -->
+      <g><rect class="lblbg" x="476" y="366" rx="9" width="128" height="26"/><text class="edgelabel" x="540" y="383" text-anchor="middle">OpenAI API</text></g>
+      <g><rect class="lblbg" x="300" y="772" rx="9" width="74" height="24"/><text class="edgelabel muted" x="337" y="788" text-anchor="middle">route</text></g>
+      <g><rect class="lblbg" x="548" y="784" rx="9" width="74" height="24"/><text class="edgelabel muted" x="585" y="800" text-anchor="middle">route</text></g>
+      <g><rect class="lblbg" x="838" y="700" rx="9" width="98" height="24"/><text class="edgelabel muted" x="887" y="716" text-anchor="middle">callback</text></g>
+    </svg>
+
+    <!-- ===== NODES ===== -->
+    <!-- Hermes Agent -->
+    <div class="node agent" style="left:290px; top:140px; width:500px;">
+      <span class="tag">Agent</span>
+      <div class="head">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M9 3h6"/><circle cx="9" cy="13.5" r="1.4" fill="#fff" stroke="none"/><circle cx="15" cy="13.5" r="1.4" fill="#fff" stroke="none"/></svg></div>
+        <div><h3>Coding Agent — OpenCode or Hermes</h3><p class="sub">Pick either. Both are provider-agnostic — memory · skills · cron</p></div>
+      </div>
+      <p class="why">Why: a harness that points at one endpoint and keeps context across sessions. OpenCode is the easy on-ramp; Hermes adds scheduled autonomous jobs. Swap freely — both speak the same OpenAI API.</p>
+      <div class="links">
+        <a class="lnk" href="https://opencode.ai/docs/" target="_blank" rel="noopener">OpenCode docs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="https://github.com/themanyone/hermes" target="_blank" rel="noopener">Hermes <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="#step-agent">↓ setup steps</a>
+      </div>
+    </div>
+
+    <!-- LiteLLM Gateway -->
+    <div class="node gateway" style="left:290px; top:470px; width:500px;">
+      <span class="tag">Gateway</span>
+      <div class="head">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="#06302b" stroke-width="1.9"><path d="M12 2l8 4.6v9.2L12 22l-8-5.2V6.6z"/><path d="M12 7v10M7 9.5l10 5M17 9.5l-10 5"/></svg></div>
+        <div><h3>LiteLLM Gateway</h3><p class="sub">One OpenAI-compatible endpoint · logs tokens &amp; cost</p></div>
+      </div>
+      <p class="why">Why: the single choke point — every request, token and dollar passes through here, so nothing is invisible. Routes to any backend.</p>
+      <div class="links">
+        <a class="lnk" href="https://docs.litellm.ai/docs/simple_proxy" target="_blank" rel="noopener">LiteLLM Proxy <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="https://docs.litellm.ai/docs/observability/langfuse_integration" target="_blank" rel="noopener">Langfuse callback <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="#step-litellm">↓ setup steps</a>
+      </div>
+    </div>
+
+    <!-- WSL2 / vLLM -->
+    <div class="node compute" style="left:60px; top:880px; width:392px;">
+      <span class="tag">Compute · WSL2 (CUDA)</span>
+      <div class="head">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="#053b2a" stroke-width="1.9"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></div>
+        <div><h3>vLLM</h3><p class="sub">High-throughput local inference</p></div>
+      </div>
+      <div class="stack">
+        <div class="pill"><span class="dot"></span><span>Qwen2.5 / Qwen3 Coder<small>size the model to your VRAM (quantize to fit)</small></span></div>
+      </div>
+      <p class="why">Why: continuous batching on CUDA cores — real throughput a llama.cpp backend can't match. The model you can run scales with your GPU's VRAM.</p>
+      <div class="links">
+        <a class="lnk" href="https://docs.vllm.ai/en/latest/getting_started/installation/gpu.html" target="_blank" rel="noopener">vLLM install <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="#step-vllm">↓ setup steps</a>
+      </div>
+    </div>
+
+    <!-- LM Link client -->
+    <div class="node link" style="left:472px; top:900px; width:268px;">
+      <span class="tag">Mesh</span>
+      <div class="head">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="#1d1340" stroke-width="1.9"><path d="M9 12a3 3 0 0 1 3-3h3a3 3 0 0 1 0 6h-1.5"/><path d="M15 12a3 3 0 0 1-3 3H9a3 3 0 0 1 0-6h1.5"/></svg></div>
+        <div><h3>Mesh bridge <span style="font-weight:600;color:var(--muted);font-size:12px">(optional)</span></h3><p class="sub">A second machine's model as localhost:1234</p></div>
+      </div>
+      <p class="why">Why: optional — surfaces a model running on another box locally over an encrypted Tailscale mesh, no open ports. Skip this if you only have one machine.</p>
+      <div class="links">
+        <a class="lnk" href="https://lmstudio.ai/docs/app/api" target="_blank" rel="noopener">LM Studio API <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="#step-lmstudio">↓ setup steps</a>
+      </div>
+    </div>
+
+    <!-- Langfuse -->
+    <div class="node obs" style="left:760px; top:880px; width:262px;">
+      <span class="tag">Observability</span>
+      <div class="head">
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="#3a2807" stroke-width="1.9"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+        <div><h3>Langfuse</h3><p class="sub">Self-hosted · MIT · free</p></div>
+      </div>
+      <div class="dbs">
+        <div class="db"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg>Postgres</div>
+        <div class="db"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg>ClickHouse</div>
+        <div class="db"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg>Redis</div>
+        <div class="db"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg>MinIO/S3</div>
+      </div>
+      <p class="why">Why: agent-step traces, evals &amp; metrics in one stack you own — the deep view LiteLLM logs alone can't give.</p>
+      <div class="links">
+        <a class="lnk" href="https://langfuse.com/self-hosting/docker-compose" target="_blank" rel="noopener">Self-host docs <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M9 7h8v8"/></svg></a>
+        <a class="lnk" href="#step-langfuse">↓ setup steps</a>
+      </div>
+    </div>
+
+    <!-- footer platform chips -->
+    <div class="footer">
+      <div class="fitem"><span class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="#76b900"><path d="M3 9c4-3 11-3 16 0-3 5-13 5-16 0zm9 .3a2.7 2.7 0 100 5.4 2.7 2.7 0 000-5.4z"/></svg></span><span>Windows + NVIDIA<small>→ vLLM (WSL2 / CUDA)</small></span></div>
+      <div class="sep"></div>
+      <div class="fitem"><span class="ic"><svg viewBox="0 0 24 24" width="24" height="24" fill="#e2e8f0"><path d="M12 2c-2 0-3 2-3 4 0 1.5-1 2-2 4s-2 5-2 7c0 2 2 3 3 2 1 1 7 1 8 0 1 1 3 0 3-2 0-2-1-5-2-7s-2-2.5-2-4c0-2-1-4-3-4z"/></svg></span><span>macOS<small>→ LM Studio (Apple Silicon)</small></span></div>
+      <div class="sep"></div>
+      <div class="fitem"><span class="ic"><svg viewBox="0 0 24 24" width="24" height="24" fill="#2496ed"><path d="M3 10h3v3H3zm4 0h3v3H7zm4 0h3v3h-3zM7 6h3v3H7zm4 0h3v3h-3zm0-4h3v3h-3zM3 14h18c0 4-3 6-7 6-5 0-8-2-11-6z"/></svg></span><span>Docker<small>Langfuse + gateway DB</small></span></div>
+      <div class="sep"></div>
+      <div class="fitem"><span class="ic"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M9 12a3 3 0 0 1 3-3h3a3 3 0 0 1 0 6h-1.5"/><path d="M15 12a3 3 0 0 1-3 3H9a3 3 0 0 1 0-6h1.5"/></svg></span><span>Tailscale<small>optional mesh</small></span></div>
+    </div>
+  </div>
+
+  <!-- ======================= BUILD GUIDE ======================= -->
+  <section class="guide">
+    <div class="ghead">
+      <h2>Build it from scratch</h2>
+      <p>Copy · paste · run — bottom-up, one endpoint at a time</p>
+    </div>
+
+    <!-- ---------- 1. MODEL BACKEND (per machine) ---------- -->
+    <div class="step compute-s" id="step-vllm">
+      <div class="stephead">
+        <div class="num">1</div>
+        <div>
+          <h3>Pick your model backend</h3>
+          <p class="meta">The thing that actually runs the LLM and speaks OpenAI <code>/v1</code>. Choose your machine.</p>
+        </div>
+        <span class="badge">per machine</span>
+      </div>
+
+      <div class="lane">
+        <div class="lanebtn active" data-lane="win">🪟 Windows + NVIDIA → vLLM</div>
+        <div class="lanebtn" data-lane="mac">🍎 macOS (Apple Silicon) → LM Studio</div>
+      </div>
+
+      <!-- WINDOWS LANE -->
+      <div class="lane-win">
+        <p class="desc">vLLM gives continuous batching on your NVIDIA GPU's CUDA cores. It runs inside <b>WSL2</b> (Linux on Windows). Do steps 1–2 once, then 3–4 to serve. <b>Model choice depends on VRAM</b> — a 7B coder fits ~8&nbsp;GB; bigger MoE coders need more (quantize to fit).</p>
+        <div class="clickbox"><span class="pin">▶</span><div><b>Click first:</b> install the latest <a href="https://www.nvidia.com/Download/index.aspx" target="_blank" rel="noopener">NVIDIA Game Ready / Studio driver</a> on Windows (the host). WSL2 borrows the host driver — you do <b>not</b> install CUDA drivers inside Ubuntu.</div></div>
+        <div class="code">
+          <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">PowerShell (Admin) — one time</span><button class="copy">Copy</button></div>
+<pre><span class="c"># Install WSL2 + Ubuntu, then reboot</span>
+<span class="k">wsl</span> --install -d Ubuntu</pre>
+        </div>
+        <div class="code">
+          <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Ubuntu (WSL2) — verify GPU + install vLLM</span><button class="copy">Copy</button></div>
+<pre><span class="c"># 1. confirm your NVIDIA GPU is visible inside WSL2</span>
+<span class="k">nvidia-smi</span>
+
+<span class="c"># 2. fast python env manager</span>
+<span class="k">curl</span> -LsSf https://astral.sh/uv/install.sh | sh
+<span class="k">source</span> ~/.bashrc
+
+<span class="c"># 3. create env + install vLLM</span>
+<span class="k">uv</span> venv --python 3.12 .venv
+<span class="k">source</span> .venv/bin/activate
+<span class="k">uv</span> pip install vllm</pre>
+        </div>
+        <div class="code">
+          <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Ubuntu (WSL2) — serve the coder model</span><button class="copy">Copy</button></div>
+<pre><span class="c"># OpenAI-compatible server on http://localhost:8000/v1</span>
+<span class="k">vllm</span> serve Qwen/Qwen2.5-Coder-7B-Instruct \
+  --port 8000 \
+  --max-model-len 16384 \
+  --gpu-memory-utilization 0.92</pre>
+        </div>
+        <p class="desc">Leave this running. Backend endpoint = <code>http://localhost:8000/v1</code>. Got more VRAM? Swap in a bigger MoE coder like <code>Qwen/Qwen3-Coder-30B-A3B-Instruct</code> with an AWQ/GPTQ quant sized to your card.</p>
+      </div>
+
+      <!-- MAC LANE -->
+      <div class="lane-mac hidden" id="step-lmstudio">
+        <p class="desc">LM Studio is the simplest path on Apple Silicon — a GUI that downloads models and exposes the same OpenAI server.</p>
+        <div class="clickbox"><span class="pin">▶</span><div>
+          <b>Click steps in the LM Studio app:</b><br>
+          1. Download &amp; open <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a>.<br>
+          2. <b>Search</b> tab → grab <b>Qwen2.5-Coder 7B Instruct</b> (pick an <b>MLX</b> build for Apple Silicon).<br>
+          3. <b>Developer</b> tab (left sidebar) → load the model → toggle <b>Status: Running</b>.<br>
+          4. Confirm the server URL shows <code>http://localhost:1234</code>.
+        </div></div>
+        <div class="code">
+          <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — smoke-test the LM Studio server</span><button class="copy">Copy</button></div>
+<pre><span class="c"># list what LM Studio is serving</span>
+<span class="k">curl</span> http://localhost:1234/v1/models</pre>
+        </div>
+        <p class="desc">Backend endpoint = <code>http://localhost:1234/v1</code>. If you enabled an API key in LM Studio's server settings, note it for the LiteLLM step (otherwise any string works).</p>
+      </div>
+    </div>
+
+    <!-- ---------- 2. LANGFUSE ---------- -->
+    <div class="step obs-s" id="step-langfuse">
+      <div class="stephead">
+        <div class="num">2</div>
+        <div>
+          <h3>Stand up Langfuse (observability)</h3>
+          <p class="meta">Self-hosted, MIT, free. Stores every trace, token count &amp; latency. Same on Mac or Windows.</p>
+        </div>
+        <span class="badge">shared</span>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Click first:</b> install &amp; launch <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a> and wait until the whale icon stops animating (engine running).</div></div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — get the stack + headless keys</span><button class="copy">Copy</button></div>
+<pre><span class="k">mkdir</span> -p ~/Documents/new-arch/langfuse &amp;&amp; <span class="k">cd</span> ~/Documents/new-arch/langfuse
+
+<span class="c"># official compose: postgres + clickhouse + redis + minio + web</span>
+<span class="k">curl</span> -o docker-compose.yml \
+  https://raw.githubusercontent.com/langfuse/langfuse/main/docker-compose.yml
+
+<span class="c"># headless init: pre-creates org/project/user + API keys (no UI clicking)</span>
+<span class="k">cat</span> &gt; .env &lt;&lt;'EOF'
+LANGFUSE_INIT_ORG_ID=local
+LANGFUSE_INIT_ORG_NAME=Local
+LANGFUSE_INIT_PROJECT_ID=new-arch
+LANGFUSE_INIT_PROJECT_NAME=new-arch
+LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-1234567890abcdef
+LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-1234567890abcdef
+LANGFUSE_INIT_USER_EMAIL=info@yuv.ai
+LANGFUSE_INIT_USER_NAME=Yuval
+LANGFUSE_INIT_USER_PASSWORD=langfuse123
+EOF
+
+<span class="c"># boot it (first run pulls images — a few minutes)</span>
+<span class="k">docker</span> compose up -d</pre>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Open</b> <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a> → log in with <code>info@yuv.ai</code> / <code>langfuse123</code>. Project <b>new-arch</b> is already there with the keys above.</div></div>
+      <p class="desc" style="color:var(--faint)">⚠ The compose file ships insecure <code>CHANGEME</code> default secrets — fine for a local-only box. Regenerate them (<code>openssl rand -hex 32</code>) before exposing this to any network.</p>
+    </div>
+
+    <!-- ---------- 3. LITELLM ---------- -->
+    <div class="step gateway-s" id="step-litellm">
+      <div class="stephead">
+        <div class="num">3</div>
+        <div>
+          <h3>LiteLLM proxy → with Langfuse callback</h3>
+          <p class="meta">One OpenAI endpoint in front of your model; every call is shipped to Langfuse. This is the whole integration.</p>
+        </div>
+        <span class="badge">shared</span>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — install</span><button class="copy">Copy</button></div>
+<pre><span class="k">mkdir</span> -p ~/Documents/new-arch/litellm &amp;&amp; <span class="k">cd</span> ~/Documents/new-arch/litellm
+<span class="k">python3</span> -m venv .venv &amp;&amp; <span class="k">source</span> .venv/bin/activate
+<span class="c"># pin langfuse&lt;3 — LiteLLM's callback imports the v2 SDK (talks fine to a v3 server)</span>
+<span class="c"># prisma — only needed for the dashboard UI (keys, spend); skip it for trace-only</span>
+<span class="k">pip</span> install "litellm[proxy]" "langfuse&lt;3" prisma</pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">config.yaml — uncomment the line for YOUR backend</span><button class="copy">Copy</button></div>
+<pre><span class="k">cat</span> &gt; config.yaml &lt;&lt;'EOF'
+model_list:
+  - model_name: qwen-coder            <span class="c"># what the agent asks for</span>
+    litellm_params:
+      <span class="c"># --- Windows / vLLM ---</span>
+      model: openai/Qwen/Qwen2.5-Coder-7B-Instruct
+      api_base: http://localhost:8000/v1
+      <span class="c"># --- Mac / LM Studio (use these two instead) ---</span>
+      <span class="c"># model: openai/qwen2.5-coder</span>
+      <span class="c"># api_base: http://localhost:1234/v1</span>
+      api_key: dummy                  <span class="c"># local backends ignore it</span>
+
+litellm_settings:
+  <span class="c"># the entire integration: ship every call to Langfuse</span>
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+EOF</pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — point at Langfuse &amp; start the proxy</span><button class="copy">Copy</button></div>
+<pre><span class="c"># these match the keys from step 2</span>
+<span class="k">export</span> LANGFUSE_PUBLIC_KEY=pk-lf-1234567890abcdef
+<span class="k">export</span> LANGFUSE_SECRET_KEY=sk-lf-1234567890abcdef
+<span class="k">export</span> LANGFUSE_HOST=http://localhost:3000
+
+<span class="c"># the proxy refuses anonymous calls — set a key clients must send</span>
+<span class="k">export</span> LITELLM_MASTER_KEY=sk-local-master
+
+<span class="k">litellm</span> --config config.yaml --port 4000</pre>
+      </div>
+      <p class="desc">Gateway is now live at <code>http://localhost:4000/v1</code>. That's the whole pipeline — routing + traces. <b>The dashboard UI (<code>:4000/ui</code>) is optional and needs a database</b>, below.</p>
+
+      <div class="clickbox"><span class="pin">▶</span><div><b>Optional — the LiteLLM dashboard UI.</b> Without a database, <code>:4000/ui</code> login fails and management calls return <code>"No connected db"</code>. The fix: give LiteLLM a Postgres DB. You already have one — the Langfuse stack ships a Postgres container, so just create a separate <code>litellm</code> database inside it (no extra RAM).</div></div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — one-time DB setup for the UI</span><button class="copy">Copy</button></div>
+<pre><span class="c"># 1. create a litellm DB inside the Langfuse Postgres container</span>
+<span class="k">docker</span> exec langfuse-postgres-1 \
+  psql -U postgres -c "CREATE DATABASE litellm"
+
+<span class="c"># 2. generate the prisma client + create the tables (one time)</span>
+<span class="k">export</span> PATH="$PWD/.venv/bin:$PATH"
+<span class="k">export</span> DATABASE_URL="postgresql://postgres:postgres@localhost:5432/litellm"
+<span class="k">prisma</span> generate --schema .venv/lib/python*/site-packages/litellm_proxy_extras/schema.prisma
+<span class="k">prisma</span> db push --schema .venv/lib/python*/site-packages/litellm_proxy_extras/schema.prisma</pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — restart the proxy WITH the database + UI login</span><button class="copy">Copy</button></div>
+<pre><span class="k">export</span> LITELLM_MASTER_KEY=sk-local-master
+<span class="k">export</span> DATABASE_URL="postgresql://postgres:postgres@localhost:5432/litellm"
+<span class="c"># the username/password you'll type at :4000/ui</span>
+<span class="k">export</span> UI_USERNAME=admin
+<span class="k">export</span> UI_PASSWORD=admin
+
+<span class="k">litellm</span> --config config.yaml --port 4000</pre>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Open</b> <a href="http://localhost:4000/ui" target="_blank" rel="noopener">http://localhost:4000/ui</a> → log in with <code>admin</code> / <code>admin</code>. First boot runs DB migrations (a minute or two) before it accepts logins.</div></div>
+    </div>
+
+    <!-- ---------- 4. TEST ---------- -->
+    <div class="step gateway-s">
+      <div class="stephead">
+        <div class="num">4</div>
+        <div>
+          <h3>Send a test call → see the trace</h3>
+          <p class="meta">Prove the whole chain works end to end.</p>
+        </div>
+        <span class="badge">verify</span>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Terminal — hit the gateway</span><button class="copy">Copy</button></div>
+<pre><span class="k">curl</span> http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-local-master" \
+  -d '{
+    "model": "qwen-coder",
+    "messages": [{"role":"user","content":"write a haiku about local LLMs"}]
+  }'</pre>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Open</b> <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a> → <b>Tracing</b> → your call appears with the prompt, response, token counts and latency. If it's there, the spine works. ✅</div></div>
+    </div>
+
+    <!-- ---------- 5. AGENT ---------- -->
+    <div class="step agent-s" id="step-agent">
+      <div class="stephead">
+        <div class="num">5</div>
+        <div>
+          <h3>Wire up the coding agent</h3>
+          <p class="meta">Any OpenAI-compatible agent works — just point its base URL at LiteLLM (<code>:4000</code>), not the model.</p>
+        </div>
+        <span class="badge">agent</span>
+      </div>
+      <p class="desc"><b>The golden rule:</b> the agent talks only to LiteLLM. That's how every token lands in Langfuse — the agent never knows (or cares) whether vLLM or LM Studio answered.</p>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">OpenCode — install &amp; point at the gateway</span><button class="copy">Copy</button></div>
+<pre><span class="c"># install</span>
+<span class="k">curl</span> -fsSL https://opencode.ai/install | bash
+
+<span class="c"># tell it to use your local gateway (key = your LiteLLM master key)</span>
+<span class="k">export</span> OPENAI_API_BASE=http://localhost:4000/v1
+<span class="k">export</span> OPENAI_API_KEY=sk-local-master
+
+<span class="k">opencode</span></pre>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div>In OpenCode, pick the model named <b>qwen-coder</b> (the <code>model_name</code> from your LiteLLM config).</div></div>
+      <p class="desc" style="margin-top:16px"><b>Hermes</b> — point its model at the gateway and register the master key in its credential pool (it won't read a plain env var if a pooled credential already exists):</p>
+      <div class="code">
+        <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Hermes — route through LiteLLM + auth</span><button class="copy">Copy</button></div>
+<pre><span class="c"># ~/.hermes/config.yaml  → model.base_url: http://127.0.0.1:4000/v1</span>
+
+<span class="c"># register the gateway's master key in Hermes' credential pool</span>
+<span class="k">hermes</span> auth add lmstudio --type api-key \
+  --label litellm-master --api-key sk-local-master
+
+<span class="c"># run a one-shot through the gateway (every call lands in Langfuse)</span>
+<span class="k">hermes</span> -z "write a haiku about local LLMs" -m qwen-coder --yolo</pre>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Heads-up (resources):</b> the full Langfuse v3 stack (ClickHouse + MinIO + Redis + Postgres) plus a local model is heavy. On a RAM-tight machine, run <b>one</b> model at a time and expect ClickHouse trace queries to lag if memory is maxed.</div></div>
+    </div>
+
+    <!-- ---------- 6. WHERE'S MY DATA ---------- -->
+    <div class="step" id="step-data">
+      <div class="stephead">
+        <div class="num" style="background:linear-gradient(160deg,#f5b53d,#d6902a);color:#3a2807">6</div>
+        <div>
+          <h3>Where do I see my data? (two screens, two jobs)</h3>
+          <p class="meta">You have two dashboards. They answer different questions — don't look for traces in LiteLLM or for cost in Langfuse.</p>
+        </div>
+        <span class="badge">read it</span>
+      </div>
+      <p class="desc">Every call flows <b>agent → LiteLLM → model</b>, and LiteLLM <b>fires a copy to Langfuse</b>. So the same request shows up in both places, but each tool keeps a different slice of it.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div style="border:1px solid rgba(45,212,191,.3);border-radius:14px;padding:16px 18px;background:rgba(45,212,191,.05)">
+          <h3 style="margin:0;font-size:15px;color:#2dd4bf">LiteLLM UI — <code style="font-size:12px">:4000/ui</code></h3>
+          <p class="meta" style="margin:6px 0 10px">The <b>operations</b> view: who spent what, which keys exist, requests per model.</p>
+          <p class="desc" style="margin:0;font-size:13px">Log in (<code>admin/admin</code>), then:</p>
+          <ul style="margin:8px 0 0;padding-left:18px;color:#b9c4d6;font-size:13px;line-height:1.7">
+            <li><b>Usage</b> — spend, request &amp; token counts per model/key/day</li>
+            <li><b>Virtual Keys</b> — issue scoped keys with budgets &amp; rate limits</li>
+            <li><b>Models</b> — what's registered &amp; live health</li>
+            <li><b>Logs</b> — a flat list of recent requests (status, latency, cost)</li>
+          </ul>
+        </div>
+        <div style="border:1px solid rgba(245,181,61,.3);border-radius:14px;padding:16px 18px;background:rgba(245,181,61,.05)">
+          <h3 style="margin:0;font-size:15px;color:#f5b53d">Langfuse — <code style="font-size:12px">:3000</code></h3>
+          <p class="meta" style="margin:6px 0 10px">The <b>deep</b> view: the actual prompt, the actual response, step by step.</p>
+          <p class="desc" style="margin:0;font-size:13px">Log in (<code>info@yuv.ai/langfuse123</code>), then:</p>
+          <ul style="margin:8px 0 0;padding-left:18px;color:#b9c4d6;font-size:13px;line-height:1.7">
+            <li><b>Tracing → Traces</b> — every call: full prompt + completion text</li>
+            <li>Click a trace — tokens in/out, latency, model, cost per call</li>
+            <li><b>Sessions</b> — multi-turn agent runs grouped together</li>
+            <li><b>Dashboards</b> — latency &amp; volume trends over time</li>
+          </ul>
+        </div>
+      </div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Rule of thumb:</b> &ldquo;How much did I spend / which key?&rdquo; → <b>LiteLLM</b>. &ldquo;What exactly did the model say, and how long did it take?&rdquo; → <b>Langfuse</b>. Traces only appear once you've sent a call (step 4).</div></div>
+    </div>
+
+    <p class="desc" style="text-align:center;color:var(--faint);margin-top:30px">
+      Backend (vLLM / LM Studio) → <b>:8000 / :1234</b> &nbsp;·&nbsp; LiteLLM gateway → <b>:4000</b> &nbsp;·&nbsp; Langfuse UI → <b>:3000</b>
+    </p>
+  </section>
+
+  <script>
+    // copy-to-clipboard for every code block
+    document.querySelectorAll('.copy').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var pre = btn.closest('.code').querySelector('pre');
+        navigator.clipboard.writeText(pre.innerText).then(function(){
+          var old = btn.textContent; btn.textContent='Copied ✓'; btn.classList.add('done');
+          setTimeout(function(){ btn.textContent=old; btn.classList.remove('done'); }, 1400);
+        });
+      });
+    });
+    // Windows / Mac lane switch
+    document.querySelectorAll('.lanebtn').forEach(function(tab){
+      tab.addEventListener('click', function(){
+        var lane = tab.getAttribute('data-lane');
+        document.querySelectorAll('.lanebtn').forEach(function(t){ t.classList.toggle('active', t===tab); });
+        document.querySelector('.lane-win').classList.toggle('hidden', lane!=='win');
+        document.querySelector('.lane-mac').classList.toggle('hidden', lane!=='mac');
+      });
+    });
+  </script>
+</body>
+</html>
