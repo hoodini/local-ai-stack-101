@@ -58,6 +58,64 @@ Open **https://hoodini.github.io/local-ai-stack-101/** and click **⚡ Run a req
 
 ---
 
+## Follow one message, end to end
+
+The live page has an **interactive stepper** — click a stop or press **▶ Play** and each hop lights up the matching node in the diagram. Here's the same journey in text. A single prompt travels five stops:
+
+![Interactive end-to-end journey stepper](docs/journey.png)
+
+**Before you start, open three tabs:** LiteLLM `:4000/ui` (login `admin` / `admin`), Langfuse `:3000` (the email + password you set on first run), and — if you're using LM Studio — its desktop app on the **Developer / Local Server** tab.
+
+### 1 · You send a message — `agent → :4000`
+Open your agent and send a prompt. It talks **only** to LiteLLM, never to the model directly.
+
+```bash
+# OpenCode — it's already pointed at the gateway
+opencode
+# then type your prompt and hit Enter
+
+# …or Hermes, one-shot:
+hermes -m qwen-coder -z "Reverse a string in Python."
+```
+
+> **Which model?** `qwen-coder` / `seed-coder` → Ollama (works immediately). `qwen3.5-…-mlx` → LM Studio (load a model in its app first).
+> **What you'll see:** the answer streams back in your terminal.
+
+### 2 · LiteLLM routes it — `gateway · :4000`
+The gateway reads the **model name** and picks the backend — same request shape, different engine. This single choke point is *why* every token is observable: routing **and** the Langfuse callback both fire here.
+> **What you'll see:** nothing to click — routing is instant. A copy of the call has already been shipped to Langfuse via the `success_callback: ["langfuse"]` line in `config.yaml`.
+
+### 3 · The engine generates — `Ollama :11434 · LM Studio :1234`
+Your local model does the actual inference, on your own hardware. Nothing leaves the machine.
+> **What you'll see:** in **LM Studio**, the Developer/Local Server log shows `Received POST /v1/chat/completions` the instant you sent it. **Ollama** logs to its own console. That's proof the gateway routed *your* request into the engine.
+
+### 4 · Watch it in LiteLLM — `:4000/ui · admin / admin`
+Open the gateway dashboard and log in.
+- **Logs** → newest row is your call; click it for the full request & response + token counts.
+- **Usage** → spend, requests & tokens per model / key / day.
+
+> **What you'll see:** your prompt, the reply, `prompt / completion / total` tokens, latency, and which backend answered.
+
+### 5 · See the deep trace in Langfuse — `:3000 · Tracing`
+Open Langfuse, pick your project, click **Tracing** in the sidebar.
+- The **top row** (newest first) is your call — click it.
+- Full **input + output** text, **model**, **latency**, **tokens** in/out, **cost**.
+
+> **What you'll see:** the same call you saw in LiteLLM, now with full prompt/response and a timing span. If it shows up in **both** places, the spine works end to end. ✅ Cost reads ~$0 for local models — that's correct.
+
+```
+  Agent (OpenCode / Hermes)
+        │  model name: "qwen-coder" or "qwen3.5-…-mlx"
+        ▼
+  LiteLLM :4000  ───────────────►  Logs + Usage   (gateway ledger)
+        │  routes by name             │
+        │                             └─ success_callback ─► Langfuse :3000  (full trace)
+        ▼
+  Engine: Ollama :11434  OR  LM Studio :1234   (the actual inference)
+```
+
+---
+
 ## A note on the example values
 
 Every credential in this guide — `admin/admin`, `postgres:postgres@localhost`, `sk-local-master`, `sk-lf-…`, `langfuse123` — is an **intentional localhost placeholder** for teaching, not a real secret. They live behind `localhost` on your own machine. The compose file ships insecure `CHANGEME` defaults on purpose; **regenerate them** (`openssl rand -hex 32`) before exposing anything to a network. Nothing here is wired to a real deployment.

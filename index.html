@@ -253,6 +253,63 @@
 
   /* node doc-link chips lift */
   .lnk:hover{transform:translateY(-1px)}
+
+  /* ===================== 🛤️ INTERACTIVE JOURNEY ===================== */
+  .journey{max-width:1080px; margin:0 auto; padding:6px 24px 80px;
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .journey .ghead{text-align:center; padding:18px 0 4px}
+  .journey .ghead h2{margin:0; font-size:27px; font-weight:800; letter-spacing:.2px;
+    background:linear-gradient(90deg,#cde0ff,#fff 45%,#bdeee6);
+    -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .journey .ghead p{margin:8px 0 0; color:var(--muted); font-size:13px; letter-spacing:.5px; text-transform:uppercase}
+
+  /* the clickable track */
+  .jtrack{position:relative; display:flex; justify-content:space-between; align-items:flex-start;
+    margin:34px auto 26px; max-width:900px;}
+  .jline{position:absolute; top:22px; left:9%; right:9%; height:3px; border-radius:3px;
+    background:rgba(255,255,255,.10);}
+  .jfill{position:absolute; top:0; left:0; bottom:0; right:100%; border-radius:3px;
+    background:linear-gradient(90deg,#5b8cff,#2dd4bf 55%,#f5b53d);
+    box-shadow:0 0 14px rgba(45,212,191,.6);
+    transition:right .55s cubic-bezier(.2,.8,.2,1);}
+  .jstop{position:relative; z-index:2; background:none; border:none; cursor:pointer; padding:0;
+    display:flex; flex-direction:column; align-items:center; gap:9px; width:19%;
+    font-family:inherit; color:var(--muted);}
+  .jdot{width:46px; height:46px; border-radius:50%; display:grid; place-items:center;
+    font-weight:800; font-size:15px; color:#0a0e17;
+    background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.18);
+    transition:.32s cubic-bezier(.2,.8,.2,1);}
+  .jstop .jlabel{font-size:11px; font-weight:700; letter-spacing:.3px; text-align:center; line-height:1.3;
+    text-transform:uppercase; transition:.2s;}
+  .jstop:hover .jdot{transform:translateY(-3px) scale(1.07)}
+  .jstop:hover .jlabel{color:#cdd7e6}
+  .jstop.done .jdot{background:linear-gradient(160deg,#2dd4bf,#0e8f80); border-color:transparent; color:#06302b}
+  .jstop.active .jdot{background:linear-gradient(160deg,#5b8cff,#2a5bd7); border-color:#fff; color:#fff;
+    box-shadow:0 0 0 6px rgba(91,140,255,.18), 0 14px 32px -10px rgba(91,140,255,.75);
+    transform:translateY(-3px) scale(1.13);}
+  .jstop.active .jlabel{color:#fff}
+
+  /* detail panels */
+  .jpanelwrap{border-radius:18px; padding:22px 24px; min-height:236px;
+    background:linear-gradient(165deg, rgba(20,26,40,.92), rgba(10,14,22,.95));
+    border:1px solid rgba(255,255,255,.10); box-shadow:0 24px 60px -30px rgba(0,0,0,.9);}
+  .jpanel{display:none}
+  .jpanel.show{display:block; animation:jfade .45s cubic-bezier(.2,.8,.2,1)}
+  @keyframes jfade{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+  .jpanel h3{margin:0 0 2px; font-size:18px; font-weight:700; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+  .jpanel .jport{font-size:10.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+    padding:3px 9px; border-radius:999px; color:#06302b; background:linear-gradient(160deg,#2dd4bf,#0e8f80);}
+  .jpanel ul{margin:10px 0 0; padding-left:18px; color:#b9c4d6; font-size:13.5px; line-height:1.7}
+  .jcols{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:13px}
+  .jsee{margin-top:14px; padding:12px 14px; border-radius:12px; display:flex; gap:10px; align-items:flex-start;
+    background:rgba(52,211,153,.07); border:1px solid rgba(52,211,153,.24)}
+  .jsee .pin{flex:0 0 auto; color:#34d399; font-size:15px; margin-top:1px}
+  .jsee div{color:#c3d2e6; font-size:13px; line-height:1.6}
+  .jsee b{color:#7fe6c0}
+  .jnav{display:flex; justify-content:center; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap}
+  .jnav .runbtn{animation:btnflow 5s linear infinite}
+  @media (max-width:760px){ .jcols{grid-template-columns:1fr} .jstop .jlabel{font-size:9.5px} }
+  @media (prefers-reduced-motion: reduce){ .jpanel.show{animation:none} .jfill{transition:none} }
 </style>
 </head>
 <body>
@@ -520,19 +577,19 @@
 <span class="k">cat</span> &gt; .env &lt;&lt;'EOF'
 LANGFUSE_INIT_ORG_ID=local
 LANGFUSE_INIT_ORG_NAME=Local
-LANGFUSE_INIT_PROJECT_ID=new-arch
-LANGFUSE_INIT_PROJECT_NAME=new-arch
+LANGFUSE_INIT_PROJECT_ID=local-ai
+LANGFUSE_INIT_PROJECT_NAME=local-ai
 LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-1234567890abcdef
 LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-1234567890abcdef
-LANGFUSE_INIT_USER_EMAIL=info@yuv.ai
-LANGFUSE_INIT_USER_NAME=Yuval
+LANGFUSE_INIT_USER_EMAIL=you@example.com
+LANGFUSE_INIT_USER_NAME=Local Admin
 LANGFUSE_INIT_USER_PASSWORD=langfuse123
 EOF
 
 <span class="c"># boot it (first run pulls images — a few minutes)</span>
 <span class="k">docker</span> compose up -d</pre>
       </div>
-      <div class="clickbox"><span class="pin">▶</span><div><b>Open</b> <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a> → log in with <code>info@yuv.ai</code> / <code>langfuse123</code>. Project <b>new-arch</b> is already there with the keys above.</div></div>
+      <div class="clickbox"><span class="pin">▶</span><div><b>Open</b> <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a> → log in with <code>you@example.com</code> / <code>langfuse123</code> (the values you set above). Project <b>local-ai</b> is already there with the keys above.</div></div>
       <p class="desc" style="color:var(--faint)">⚠ The compose file ships insecure <code>CHANGEME</code> default secrets — fine for a local-only box. Regenerate them (<code>openssl rand -hex 32</code>) before exposing this to any network.</p>
     </div>
 
@@ -702,7 +759,7 @@ EOF</pre>
         <div style="border:1px solid rgba(245,181,61,.3);border-radius:14px;padding:16px 18px;background:rgba(245,181,61,.05)">
           <h3 style="margin:0;font-size:15px;color:#f5b53d">Langfuse — <code style="font-size:12px">:3000</code></h3>
           <p class="meta" style="margin:6px 0 10px">The <b>deep</b> view: the actual prompt, the actual response, step by step.</p>
-          <p class="desc" style="margin:0;font-size:13px">Log in (<code>info@yuv.ai/langfuse123</code>), then:</p>
+          <p class="desc" style="margin:0;font-size:13px">Log in (the email &amp; password you set on first run), then:</p>
           <ul style="margin:8px 0 0;padding-left:18px;color:#b9c4d6;font-size:13px;line-height:1.7">
             <li><b>Tracing → Traces</b> — every call: full prompt + completion text</li>
             <li>Click a trace — tokens in/out, latency, model, cost per call</li>
@@ -717,6 +774,91 @@ EOF</pre>
     <p class="desc" style="text-align:center;color:var(--faint);margin-top:30px">
       Backend (vLLM / LM Studio) → <b>:8000 / :1234</b> &nbsp;·&nbsp; LiteLLM gateway → <b>:4000</b> &nbsp;·&nbsp; Langfuse UI → <b>:3000</b>
     </p>
+  </section>
+
+  <!-- ===================== 🛤️ FOLLOW ONE MESSAGE END-TO-END ===================== -->
+  <section class="journey" id="journey">
+    <div class="ghead">
+      <h2>Follow one message, end to end</h2>
+      <p>From your keystroke to the Langfuse trace · click a stop or press ▶ Play</p>
+    </div>
+
+    <!-- clickable track -->
+    <div class="jtrack" id="jtrack">
+      <div class="jline"><span class="jfill" id="jfill"></span></div>
+      <button class="jstop" data-i="0"><span class="jdot">1</span><span class="jlabel">You send</span></button>
+      <button class="jstop" data-i="1"><span class="jdot">2</span><span class="jlabel">Gateway routes</span></button>
+      <button class="jstop" data-i="2"><span class="jdot">3</span><span class="jlabel">Engine generates</span></button>
+      <button class="jstop" data-i="3"><span class="jdot">4</span><span class="jlabel">LiteLLM logs</span></button>
+      <button class="jstop" data-i="4"><span class="jdot">5</span><span class="jlabel">Langfuse trace</span></button>
+    </div>
+
+    <div class="jpanelwrap">
+      <!-- 1 -->
+      <div class="jpanel show" data-i="0">
+        <h3>You send a message <span class="jport">agent → :4000</span></h3>
+        <p class="desc" style="margin-top:9px">Open your agent and send a prompt. It talks <b>only</b> to LiteLLM — never to the model directly.</p>
+        <div class="jcols">
+          <div class="code">
+            <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">OpenCode</span><button class="copy">Copy</button></div>
+<pre><span class="k">opencode</span>
+<span class="c"># then type your prompt and hit Enter</span></pre>
+          </div>
+          <div class="code">
+            <div class="bar"><span class="dotr" style="background:#ff5f56"></span><span class="dotr" style="background:#ffbd2e"></span><span class="dotr" style="background:#27c93f"></span><span class="fname">Hermes (one-shot)</span><button class="copy">Copy</button></div>
+<pre><span class="k">hermes</span> -m qwen-coder \
+  -z <span class="s">"Reverse a string in Python."</span></pre>
+          </div>
+        </div>
+        <div class="jsee"><span class="pin">▶</span><div><b>What you'll see:</b> the answer streams back in your terminal. <b>Which model?</b> <code>qwen-coder</code> → Ollama (works now); <code>qwen3.5-…-mlx</code> → LM Studio (load a model in its app first).</div></div>
+      </div>
+
+      <!-- 2 -->
+      <div class="jpanel" data-i="1">
+        <h3>LiteLLM routes it <span class="jport">gateway · :4000</span></h3>
+        <p class="desc" style="margin-top:9px">The gateway reads the <b>model name</b> you sent and picks the backend — same request shape, different engine. This single choke point is <i>why</i> every token is observable: routing and the Langfuse callback both fire right here.</p>
+        <ul>
+          <li><code>qwen-coder</code> / <code>seed-coder</code> &nbsp;→&nbsp; Ollama (<code>:11434</code>)</li>
+          <li><code>qwen3.5-…-mlx</code> &nbsp;→&nbsp; LM Studio (<code>:1234</code>)</li>
+        </ul>
+        <div class="jsee"><span class="pin">▶</span><div><b>What you'll see:</b> nothing to click — routing is instant. But the gateway has already fired a copy of this call to Langfuse (the <code>success_callback</code> in <code>config.yaml</code>).</div></div>
+      </div>
+
+      <!-- 3 -->
+      <div class="jpanel" data-i="2">
+        <h3>The engine generates <span class="jport">Ollama :11434 · LM Studio :1234</span></h3>
+        <p class="desc" style="margin-top:9px">Your local model does the actual inference, on your own hardware. Nothing leaves the machine.</p>
+        <div class="jsee"><span class="pin">▶</span><div><b>What you'll see:</b> in <b>LM Studio</b>, open the <b>Developer</b> (Local Server) tab — a line <code>Received POST /v1/chat/completions</code> appears the instant you sent the prompt. <b>Ollama</b> logs to its own console. This is the proof the gateway routed <i>your</i> request into the engine.</div></div>
+      </div>
+
+      <!-- 4 -->
+      <div class="jpanel" data-i="3">
+        <h3>Watch it in LiteLLM <span class="jport">:4000/ui · admin / admin</span></h3>
+        <p class="desc" style="margin-top:9px">Open the gateway dashboard and log in (username <code>admin</code>, password <code>admin</code> — type exactly five letters).</p>
+        <ul>
+          <li><b>Logs</b> → the newest row is your call. Click it for the full request &amp; response + token counts.</li>
+          <li><b>Usage</b> → spend, requests &amp; tokens per model / key / day.</li>
+        </ul>
+        <div class="jsee"><span class="pin">▶</span><div><b>What you'll see:</b> your prompt, the reply, <code>prompt / completion / total</code> tokens, latency, and which backend answered.</div></div>
+      </div>
+
+      <!-- 5 -->
+      <div class="jpanel" data-i="4">
+        <h3>See the deep trace in Langfuse <span class="jport">:3000 · Tracing</span></h3>
+        <p class="desc" style="margin-top:9px">Open Langfuse, log in, pick your project, then click <b>Tracing</b> in the left sidebar.</p>
+        <ul>
+          <li>The <b>top row</b> (newest first) is your call — click it.</li>
+          <li>Full <b>input + output</b> text, <b>model</b>, <b>latency</b>, <b>tokens</b> in/out, <b>cost</b>.</li>
+        </ul>
+        <div class="jsee"><span class="pin">▶</span><div><b>What you'll see:</b> the same call you saw in LiteLLM, but with the full prompt/response and a timing span. If it shows in <i>both</i> places, the spine works end to end. ✅ Cost reads ~$0 for local models — that's correct.</div></div>
+      </div>
+    </div>
+
+    <div class="jnav">
+      <button class="ghostbtn" id="jprev">‹ Back</button>
+      <button class="runbtn" id="jplay"><span class="em" id="jplayIcon">▶</span> <span id="jplayLabel">Play the journey</span></button>
+      <button class="ghostbtn" id="jnext">Next ›</button>
+    </div>
   </section>
 
   <script>
@@ -882,6 +1024,59 @@ EOF</pre>
           toast('🕹️ Konami unlocked — full local power!');
         }
       });
+    })();
+
+    // ---------- 🛤️ interactive journey stepper ----------
+    (function(){
+      var stops  = Array.prototype.slice.call(document.querySelectorAll('.jstop'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.jpanel'));
+      var fill   = document.getElementById('jfill');
+      if(!stops.length) return;
+      var playIcon = document.getElementById('jplayIcon');
+      var playLabel = document.getElementById('jplayLabel');
+      // each stop lights up the matching node in the diagram above
+      var nodeSel = ['.node.agent', '.node.gateway', '.node.compute', '.node.gateway', '.node.obs'];
+      var quips   = ['📨 You hit Enter…', '🔀 Gateway picks the backend…', '⚙️ Model generating on your hardware…',
+                     '🧾 Logged in LiteLLM…', '📊 Trace waiting in Langfuse ✓'];
+      var cur = -1, playing = false, timer = null, last = stops.length - 1;
+
+      function go(i, fire){
+        i = Math.max(0, Math.min(last, i)); cur = i;
+        stops.forEach(function(s,k){ s.classList.toggle('active', k===i); s.classList.toggle('done', k<i); });
+        panels.forEach(function(p,k){ p.classList.toggle('show', k===i); });
+        fill.style.right = (100 - (i/last)*100) + '%';
+        if(fire !== false){
+          var n = document.querySelector(nodeSel[i]);
+          if(n){ n.classList.remove('firing'); void n.offsetWidth; n.classList.add('firing');
+            if(!reduce){ var r = n.getBoundingClientRect(); confetti(r.left+r.width/2, r.top+26, {count:9, power:.55}); } }
+          toast(quips[i]);
+        }
+      }
+      function setPlayUI(on){ playIcon.textContent = on ? '⏸' : '▶'; playLabel.textContent = on ? 'Pause' : 'Play the journey'; }
+      function stopPlay(){ playing=false; clearTimeout(timer); setPlayUI(false); }
+
+      stops.forEach(function(s,k){ s.addEventListener('click', function(){ stopPlay(); go(k); }); });
+      document.getElementById('jnext').addEventListener('click', function(){ stopPlay(); go(cur+1); });
+      document.getElementById('jprev').addEventListener('click', function(){ stopPlay(); go(cur-1); });
+      document.getElementById('jplay').addEventListener('click', function(){
+        if(playing){ stopPlay(); return; }
+        playing = true; setPlayUI(true);
+        var i = (cur >= last) ? 0 : cur;
+        (function next(){
+          if(!playing) return;
+          go(i);
+          if(i >= last){
+            setTimeout(function(){
+              if(!reduce) confetti(innerWidth/2, innerHeight*0.42, {count:54, power:1.3});
+              toast('End to end — every token observable 🎉'); stopPlay();
+            }, 750);
+            return;
+          }
+          i++; timer = setTimeout(next, reduce ? 600 : 1550);
+        })();
+      });
+
+      go(0, false); // init on first stop, no fanfare
     })();
   </script>
 </body>
